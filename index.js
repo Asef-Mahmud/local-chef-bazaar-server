@@ -2,7 +2,7 @@ const express = require('express')
 const cors = require('cors');
 const app = express()
 require('dotenv').config()
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000
 
 
@@ -38,9 +38,33 @@ async function run() {
         const db = client.db('local_chef_bazaar_db')
         const mealsCollection = db.collection('meals')
         const bannerCollection = db.collection('banners')
+        const reviewsCollection = db.collection('reviews')
 
 
-        //Meals collection
+
+
+        //Banners Collection---------------
+
+
+        app.get('/banners', async (req, res) => {
+            const cursor = bannerCollection.find()
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
+
+        app.post('/banners', async (req, res) => {
+            const banners = req.body
+            const result = await bannerCollection.insertMany(banners)
+            res.send(result)
+        })
+
+        // Banner collection ends here----------------
+
+
+
+
+        //Meals collection-------------------
 
         // Latest Meals
         app.get('/latest-meals', async (req, res) => {
@@ -50,6 +74,8 @@ async function run() {
         })
 
         // Meals
+
+        // 1.Get (all)
         app.get('/meals', async (req, res) => {
             const order = req.query.order ? (req.query.order === 'asc' ? 1 : -1) : null;
 
@@ -67,31 +93,44 @@ async function run() {
 
         })
 
+        //1.1. get (one)
+        app.get('/meal-details/:id', async (req, res) => {
+            const id = req.params.id
+            const query = { _id: new ObjectId(id) }
+            const result = await mealsCollection.findOne(query)
+            res.send(result)
+        })
 
+
+
+        // 2. Post
 
         app.post('/meals', async (req, res) => {
-            const meals = req.body
+            const meals = req.body;
             const result = await mealsCollection.insertOne(meals)
             res.send(result)
         })
 
 
-        // Meals Collection ends here
 
 
-        //Banners Collection
-        app.get('/banners', async (req, res) => {
-            const cursor = bannerCollection.find()
-            const result = await cursor.toArray()
+
+
+        // Meals Collection ends here-----------------
+
+
+        //Reviews Collection
+
+        app.post('/review', async (req, res) => {
+            const review = req.body;
+            review.timestamp = Date.now();
+
+            const result = await reviewsCollection.insertOne(review)
             res.send(result)
+
         })
 
 
-        app.post('/banners', async (req, res) => {
-            const banners = req.body
-            const result = await bannerCollection.insertMany(banners)
-            res.send(result)
-        })
 
 
 
