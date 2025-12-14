@@ -6,11 +6,50 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 3000
 
 
+// Firebase admin sdk
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./local-chef-bazaar-firebase-adminsdk.json");
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+});
+
+
+
 
 // --------------middleware starts here----------
 
 app.use(express.json());
 app.use(cors());
+
+
+// Firebase Token Verification
+
+const verifyFireBaseToken = async (req, res, next) => {
+    const authorization = req.headers.authorization;
+    if (!authorization) {
+        return res.status(401).send({ message: 'Unauthorized Access' })
+    }
+
+    // If token exists -->  verification
+    const token = authorization.split(' ')[1];
+    try {
+        const decoded = await admin.auth().verifyIdToken(token);
+        console.log('inside firebaseToken', decoded)
+        req.token_email = decoded.email;
+        next();
+    }
+
+    catch (error) {
+        return res.status(401).send({ message: 'Unauthorized Access' })
+    }
+
+
+}
+
+//---------------MIDDLEWARE ENDS HERE--------------
+
 
 
 
@@ -94,7 +133,7 @@ async function run() {
         })
 
         //1.1. get (one)
-        app.get('/meal-details/:id', async (req, res) => {
+        app.get('/meal-details/:id', verifyFireBaseToken, async (req, res) => {
             const id = req.params.id
             const query = { _id: new ObjectId(id) }
             const result = await mealsCollection.findOne(query)
@@ -105,7 +144,7 @@ async function run() {
 
         // 2. Post
 
-        app.post('/meals', async (req, res) => {
+        app.post('/meals', verifyFireBaseToken, async (req, res) => {
             const meals = req.body;
             const result = await mealsCollection.insertOne(meals)
             res.send(result)
@@ -131,7 +170,13 @@ async function run() {
         })
 
 
-
+        app.get('/reviews/:mealId', async (req, res) => {
+            const mealId = req.params.mealId
+            const query = { mealId: mealId }
+            const cursor = reviewsCollection.find(query).sort({ timestamp: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+        })
 
 
 
