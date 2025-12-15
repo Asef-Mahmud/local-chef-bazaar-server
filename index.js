@@ -9,7 +9,7 @@ const port = process.env.PORT || 3000
 // Firebase admin sdk
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./local-chef-bazaar-firebase-adminsdk.json");
+const serviceAccount = require("./local-chef-bazaar-4-all-firebase-adminsdk.json");
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -38,6 +38,7 @@ const verifyFireBaseToken = async (req, res, next) => {
         const decoded = await admin.auth().verifyIdToken(token);
         console.log('inside firebaseToken', decoded)
         req.token_email = decoded.email;
+
         next();
     }
 
@@ -78,7 +79,8 @@ async function run() {
         const mealsCollection = db.collection('meals')
         const bannerCollection = db.collection('banners')
         const reviewsCollection = db.collection('reviews')
-
+        const favoritesCollection = db.collection('favorites')
+        const ordersCollection = db.collection('orders')
 
 
 
@@ -132,6 +134,7 @@ async function run() {
 
         })
 
+
         //1.1. get (one)
         app.get('/meal-details/:id', verifyFireBaseToken, async (req, res) => {
             const id = req.params.id
@@ -158,6 +161,17 @@ async function run() {
         // Meals Collection ends here-----------------
 
 
+        // Order related collection
+
+        app.post('/order', async(req, res) => {
+            const order = req.body;
+            order.orderTime = Date.now();
+
+            const result = await ordersCollection.insertOne(order)
+            res.send(result)
+        })
+
+
         //Reviews Collection
 
         app.post('/review', async (req, res) => {
@@ -169,6 +183,13 @@ async function run() {
 
         })
 
+        // This is for home page
+        app.get('/reviews', async (req, res) => {
+            const cursor = reviewsCollection.find().sort({ timestamp: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
 
         app.get('/reviews/:mealId', async (req, res) => {
             const mealId = req.params.mealId
@@ -177,6 +198,39 @@ async function run() {
             const result = await cursor.toArray()
             res.send(result)
         })
+        //Review Collection ends here
+
+
+        //Favorites collection starts here
+
+        app.get('/favorites/check/:mealId', async (req, res) => {
+            const { mealId } = req.params;
+            const { email } = req.query;
+
+            const exists = await favoritesCollection.findOne({ mealId, userEmail: email });
+            res.send({ isFavorite: !!exists });
+        });
+
+        app.post('/favorites', async (req, res) => {
+            const favorite = req.body
+            favorite.addedTime = Date.now();
+            const result = await favoritesCollection.insertOne(favorite)
+            res.send(result)
+        })
+
+
+        app.delete('/favorites/:mealId', async (req, res) => {
+
+            const mealId = req.params.mealId;
+            const userEmail = req.query.email;
+
+            const query = { mealId, userEmail }
+            const result = await favoritesCollection.deleteOne(query)
+            res.send(result)
+        })
+
+        // Favorites collection ends here
+
 
 
 
