@@ -85,6 +85,40 @@ async function run() {
 
 
 
+        //Middleware 
+
+        // Middleware to verify admin
+
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded_email; 
+            const query = { email };
+            const user = await usersCollection.findOne(query)
+
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+
+            next()
+        }
+
+
+        //Middleware to verify Chef
+
+        const verifyChef = async (req, res, next) => {
+            const email = req.decoded_email; 
+            const query = { email };
+            const user = await usersCollection.findOne(query)
+
+            if (!user || user.role !== 'chef') {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+
+            next()
+        }
+
+        //Middleware ends here
+
+
         //Banners Collection---------------
 
 
@@ -106,13 +140,23 @@ async function run() {
 
         //User collection starts here-----------------
 
-        app.post('/users', async(req, res) => {
+        app.post('/users', async (req, res) => {
             const user = req.body
-            user.userRole = "user"
-            user.userStatus = "active"
+            user.role = "user"
+            user.status = "active"
             const result = await usersCollection.insertOne(user)
             res.send(result)
         })
+
+
+        // Role check and access starts here ----------
+        app.get('/users/:email/role', async (req, res) => {
+            const email = req.params.email;
+            const query = { email }
+            const user = await usersCollection.findOne(query);
+            res.send({ role: user?.role || 'user' })
+        })
+
 
 
         //User Collection ends here --------------------
@@ -175,7 +219,7 @@ async function run() {
 
         // Order related collection
 
-        app.post('/order', async(req, res) => {
+        app.post('/order', async (req, res) => {
             const order = req.body;
             order.orderTime = Date.now();
 
