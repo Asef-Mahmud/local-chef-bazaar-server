@@ -81,6 +81,7 @@ async function run() {
         const reviewsCollection = db.collection('reviews')
         const favoritesCollection = db.collection('favorites')
         const ordersCollection = db.collection('orders')
+        const usersCollection = db.collection('users')
 
 
 
@@ -101,6 +102,20 @@ async function run() {
         })
 
         // Banner collection ends here----------------
+
+
+        //User collection starts here-----------------
+
+        app.post('/users', async(req, res) => {
+            const user = req.body
+            user.userRole = "user"
+            user.userStatus = "active"
+            const result = await usersCollection.insertOne(user)
+            res.send(result)
+        })
+
+
+        //User Collection ends here --------------------
 
 
 
@@ -152,9 +167,6 @@ async function run() {
             const result = await mealsCollection.insertOne(meals)
             res.send(result)
         })
-
-
-
 
 
 
