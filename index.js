@@ -301,6 +301,8 @@ async function run() {
 
         //DASHBOARD
 
+        // USER
+
         // ROLEREQUEST COLLECTION
 
         app.post('/role-requests', async (req, res) => {
@@ -333,14 +335,50 @@ async function run() {
         //get my-order
         app.get('/my-orders/:email', verifyFireBaseToken, async (req, res) => {
             const email = req.params.email;
-            const query = {userEmail: email}
+            const query = { userEmail: email }
 
-            const cursor = ordersCollection.find(query).sort({orderTime: -1})
+            const cursor = ordersCollection.find(query).sort({ orderTime: -1 })
             const result = await cursor.toArray()
             res.send(result)
 
         })
 
+        //get my reviews
+        app.get('/my-reviews/:email', verifyFireBaseToken, async (req, res) => {
+            const email = req.params.email;
+            const query = { userEmail: email }
+
+            const cursor = reviewsCollection.find(query).sort({ orderTime: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+
+        })
+
+        //delete my reviews
+
+        app.delete('/delete-review/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await reviewsCollection.deleteOne(query)
+            res.send(result)
+        })
+
+        // Update my reviews
+        app.patch('/update-my-review/:id', async (req, res) => {
+            const id = req.params.id;
+            const updatedReview = req.body;
+            const query = { _id: new ObjectId(id) }
+
+            const update = {
+                $set: {
+                    comment: updatedReview.comment,
+                    rating: updatedReview.rating
+                }
+            }
+
+            const result = await reviewsCollection.updateOne(query, update)
+            res.send(result)
+        })
 
 
 
