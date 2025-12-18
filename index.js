@@ -82,6 +82,7 @@ async function run() {
         const favoritesCollection = db.collection('favorites')
         const ordersCollection = db.collection('orders')
         const usersCollection = db.collection('users')
+        const roleRequestCollection = db.collection('roleRequest')
 
 
 
@@ -90,7 +91,7 @@ async function run() {
         // Middleware to verify admin
 
         const verifyAdmin = async (req, res, next) => {
-            const email = req.decoded_email; 
+            const email = req.decoded_email;
             const query = { email };
             const user = await usersCollection.findOne(query)
 
@@ -105,7 +106,7 @@ async function run() {
         //Middleware to verify Chef
 
         const verifyChef = async (req, res, next) => {
-            const email = req.decoded_email; 
+            const email = req.decoded_email;
             const query = { email };
             const user = await usersCollection.findOne(query)
 
@@ -144,13 +145,23 @@ async function run() {
             const user = req.body
             user.role = "user"
             user.status = "active"
+
             const result = await usersCollection.insertOne(user)
             res.send(result)
         })
 
+        app.get('/users/:email', verifyFireBaseToken, async (req, res) => {
+            const email = req.params.email;
+            const query = { userEmail: email }
+            const user = await usersCollection.findOne(query);
+            res.send(user)
+        })
 
-        // Role check and access starts here ----------
-        app.get('/users/:email/role', async (req, res) => {
+
+
+
+        // Role check and access ----------
+        app.get('/users/:email/role', verifyFireBaseToken, async (req, res) => {
             const email = req.params.email;
             const query = { email }
             const user = await usersCollection.findOne(query);
@@ -286,6 +297,49 @@ async function run() {
         })
 
         // Favorites collection ends here
+
+
+        //DASHBOARD
+
+        // ROLEREQUEST COLLECTION
+
+        app.post('/role-requests', async (req, res) => {
+            const { userName, userEmail, requestType } = req.body;
+
+            const existingRequest = await roleRequestCollection.findOne({
+                userEmail,
+                requestStatus: "pending"
+            });
+
+            if (existingRequest) {
+                return res.status(400).send({
+                    message: "You already have a pending request"
+                });
+            }
+
+            const requestData = {
+                userName,
+                userEmail,
+                requestType,
+                requestStatus: "pending",
+                requestTime: new Date(),
+            };
+
+            const result = await roleRequestCollection.insertOne(requestData);
+            res.send(result);
+        });
+
+
+        //get my-order
+        app.get('/my-orders/:email', verifyFireBaseToken, async (req, res) => {
+            const email = req.params.email;
+            const query = {userEmail: email}
+
+            const cursor = ordersCollection.find(query).sort({orderTime: -1})
+            const result = await cursor.toArray()
+            res.send(result)
+
+        })
 
 
 
