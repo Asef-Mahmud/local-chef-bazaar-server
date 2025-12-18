@@ -381,6 +381,29 @@ async function run() {
         })
 
 
+        //my Fav 
+        //get
+        app.get('/my-favs/:email', verifyFireBaseToken, async (req, res) => {
+            const email = req.params.email;
+            const query = { userEmail: email }
+
+            const cursor = favoritesCollection.find(query).sort({ orderTime: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+
+        })
+
+
+        //delete
+
+        app.delete('/delete-fav/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await favoritesCollection.deleteOne(query)
+            res.send(result)
+        })
+
+
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
