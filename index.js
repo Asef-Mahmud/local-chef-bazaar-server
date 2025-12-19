@@ -215,15 +215,6 @@ async function run() {
 
 
 
-        // 2. Post
-
-        app.post('/meals', verifyFireBaseToken, async (req, res) => {
-            const meals = req.body;
-            const result = await mealsCollection.insertOne(meals)
-            res.send(result)
-        })
-
-
 
         // Meals Collection ends here-----------------
 
@@ -402,6 +393,22 @@ async function run() {
             const result = await favoritesCollection.deleteOne(query)
             res.send(result)
         })
+
+
+        //CHEF 
+        //Create meal
+
+        // 2. Post
+
+        app.post('/meal', verifyFireBaseToken, async (req, res) => {
+            const meal = req.body;
+            meal.created_at = Date.now()
+            const result = await mealsCollection.insertOne(meal)
+            res.send(result)
+        })
+
+
+
 
 
 
