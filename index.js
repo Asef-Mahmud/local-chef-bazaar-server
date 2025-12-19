@@ -398,9 +398,9 @@ async function run() {
         //CHEF 
         //Create meal
 
-        // 2. Post
+        // 2. Post my meal
 
-        app.post('/meal', verifyFireBaseToken, async (req, res) => {
+        app.post('/meal', verifyFireBaseToken, verifyChef, async (req, res) => {
             const meal = req.body;
             meal.created_at = Date.now()
             const result = await mealsCollection.insertOne(meal)
@@ -408,6 +408,80 @@ async function run() {
         })
 
 
+        //3. Get my-meal 
+
+        app.get('/my-meals/:email', verifyFireBaseToken, verifyChef, async (req, res) => {
+            const email = req.params.email;
+            const query = { userEmail: email }
+
+            const cursor = mealsCollection.find(query).sort({ orderTime: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+
+        })
+
+
+        //4. Delete my meal
+
+        app.delete('/delete-my-meal/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await mealsCollection.deleteOne(query)
+            res.send(result)
+        })
+
+        // 5. Update My meal 
+        app.patch('/update-my-meal/:id', async (req, res) => {
+            const id = req.params.id;
+            const updatedMeal = req.body;
+            const query = { _id: new ObjectId(id) }
+
+            const update = {
+                $set: {
+                    foodName: updatedMeal.foodName,
+                    chefName: updatedMeal.chefName,
+                    foodImage: updatedMeal.foodImage,
+                    price: updatedMeal.price,
+                    rating: updatedMeal.rating,
+                    ingredients: updatedMeal.ingredients,
+                    deliveryArea: updatedMeal.deliveryArea,
+                    estimatedDeliveryTime: updatedMeal.estimatedDeliveryTime,
+                    chefExperience: updatedMeal.chefExperience
+                }
+            }
+
+            const result = await mealsCollection.updateOne(query, update)
+            res.send(result)
+        })
+
+
+
+        // 6. Get orders for chef
+        app.get('/orders/:chefId', verifyFireBaseToken, verifyChef, async (req, res) => {
+            const chefId = req.params.chefId
+            const query = { chefId: chefId }
+            const cursor = ordersCollection.find(query).sort({ timestamp: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
+
+        //7. Update status 
+        app.patch('/orders/:orderId', verifyFireBaseToken, verifyChef, async (req, res) => {
+            const id = req.params.orderId;
+            const {status} = req.body;
+            const query = { _id: new ObjectId(id) }
+
+            const update = {
+                $set: {
+                    orderStatus: status,
+                    updatedAt: new Date()
+                }
+            }
+
+            const result = await ordersCollection.updateOne(query, update)
+            res.send(result)
+        })
 
 
 
