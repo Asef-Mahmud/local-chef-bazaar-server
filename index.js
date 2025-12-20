@@ -91,8 +91,9 @@ async function run() {
         // Middleware to verify admin
 
         const verifyAdmin = async (req, res, next) => {
-            const email = req.decoded_email;
-            const query = { email };
+            const email = req.token_email;
+
+            const query = { userEmail: email };
             const user = await usersCollection.findOne(query)
 
             if (!user || user.role !== 'admin') {
@@ -106,8 +107,9 @@ async function run() {
         //Middleware to verify Chef
 
         const verifyChef = async (req, res, next) => {
-            const email = req.decoded_email;
-            const query = { email };
+            const email = req.token_email;
+
+            const query = { userEmail: email };
             const user = await usersCollection.findOne(query)
 
             if (!user || user.role !== 'chef') {
@@ -163,7 +165,7 @@ async function run() {
         // Role check and access ----------
         app.get('/users/:email/role', verifyFireBaseToken, async (req, res) => {
             const email = req.params.email;
-            const query = { email }
+            const query = { userEmail: email }
             const user = await usersCollection.findOne(query);
             res.send({ role: user?.role || 'user' })
         })
@@ -221,8 +223,12 @@ async function run() {
 
         // Order related collection
 
-        app.post('/order', async (req, res) => {
+        app.post('/order', verifyFireBaseToken, async (req, res) => {
             const order = req.body;
+
+            if (order.status === 'fraud') {
+                return res.status(403).send({ message: "Fraud users cannot place orders" });
+            }
             order.orderTime = Date.now();
 
             const result = await ordersCollection.insertOne(order)
@@ -232,7 +238,7 @@ async function run() {
 
         //Reviews Collection
 
-        app.post('/review', async (req, res) => {
+        app.post('/review', verifyFireBaseToken, async (req, res) => {
             const review = req.body;
             review.timestamp = Date.now();
 
@@ -249,7 +255,7 @@ async function run() {
         })
 
 
-        app.get('/reviews/:mealId', async (req, res) => {
+        app.get('/reviews/:mealId', verifyFireBaseToken, async (req, res) => {
             const mealId = req.params.mealId
             const query = { mealId: mealId }
             const cursor = reviewsCollection.find(query).sort({ timestamp: -1 })
@@ -261,7 +267,7 @@ async function run() {
 
         //Favorites collection starts here
 
-        app.get('/favorites/check/:mealId', async (req, res) => {
+        app.get('/favorites/check/:mealId', verifyFireBaseToken, async (req, res) => {
             const { mealId } = req.params;
             const { email } = req.query;
 
@@ -277,7 +283,7 @@ async function run() {
         })
 
 
-        app.delete('/favorites/:mealId', async (req, res) => {
+        app.delete('/favorites/:mealId', verifyFireBaseToken, async (req, res) => {
 
             const mealId = req.params.mealId;
             const userEmail = req.query.email;
@@ -296,7 +302,7 @@ async function run() {
 
         // ROLEREQUEST COLLECTION
 
-        app.post('/role-requests', async (req, res) => {
+        app.post('/role-requests', verifyFireBaseToken, async (req, res) => {
             const { userName, userEmail, requestType } = req.body;
 
             const existingRequest = await roleRequestCollection.findOne({
@@ -347,7 +353,7 @@ async function run() {
 
         //delete my reviews
 
-        app.delete('/delete-review/:id', async (req, res) => {
+        app.delete('/delete-review/:id', verifyFireBaseToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await reviewsCollection.deleteOne(query)
@@ -355,7 +361,7 @@ async function run() {
         })
 
         // Update my reviews
-        app.patch('/update-my-review/:id', async (req, res) => {
+        app.patch('/update-my-review/:id', verifyFireBaseToken, async (req, res) => {
             const id = req.params.id;
             const updatedReview = req.body;
             const query = { _id: new ObjectId(id) }
@@ -387,7 +393,7 @@ async function run() {
 
         //delete
 
-        app.delete('/delete-fav/:id', async (req, res) => {
+        app.delete('/delete-fav/:id', verifyFireBaseToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await favoritesCollection.deleteOne(query)
@@ -402,6 +408,11 @@ async function run() {
 
         app.post('/meal', verifyFireBaseToken, verifyChef, async (req, res) => {
             const meal = req.body;
+
+            if (meal.status === 'fraud') {
+                return res.status(403).send({ message: "Fraud chefs cannot add meals" });
+            }
+
             meal.created_at = Date.now()
             const result = await mealsCollection.insertOne(meal)
             res.send(result)
@@ -423,7 +434,7 @@ async function run() {
 
         //4. Delete my meal
 
-        app.delete('/delete-my-meal/:id', async (req, res) => {
+        app.delete('/delete-my-meal/:id', verifyFireBaseToken, verifyChef, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await mealsCollection.deleteOne(query)
@@ -431,7 +442,7 @@ async function run() {
         })
 
         // 5. Update My meal 
-        app.patch('/update-my-meal/:id', async (req, res) => {
+        app.patch('/update-my-meal/:id', verifyFireBaseToken, verifyChef, async (req, res) => {
             const id = req.params.id;
             const updatedMeal = req.body;
             const query = { _id: new ObjectId(id) }
@@ -469,7 +480,7 @@ async function run() {
         //7. Update status 
         app.patch('/orders/:orderId', verifyFireBaseToken, verifyChef, async (req, res) => {
             const id = req.params.orderId;
-            const {status} = req.body;
+            const { status } = req.body;
             const query = { _id: new ObjectId(id) }
 
             const update = {
@@ -482,6 +493,40 @@ async function run() {
             const result = await ordersCollection.updateOne(query, update)
             res.send(result)
         })
+
+
+        // Admin
+        // Get users
+        app.get('/users', verifyFireBaseToken, verifyAdmin, async (req, res) => {
+            const cursor = usersCollection.find().sort({ created_at: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
+
+        //User Set to Fraud
+
+        app.patch('/users/make-fraud/:userId', verifyFireBaseToken, verifyAdmin, async (req, res) => {
+            const id = req.params.userId;
+            const query = { _id: new ObjectId(id) }
+
+            const update = {
+                $set: {
+                    status: 'fraud',
+                }
+            }
+
+            const result = await usersCollection.updateOne(query, update)
+            res.send(result)
+        })
+
+
+        //
+
+
+
+
+
 
 
 
