@@ -298,7 +298,21 @@ async function run() {
 
         //DASHBOARD
 
-        // USER
+        // USER\
+
+
+        //Payment
+
+        app.get('/orders/payment/:id',  async (req, res) => {
+            const id = req.params.id
+            const query = {_id: new ObjectId(id)}
+            const cursor = ordersCollection.find(query)
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
+        // Payment ends here
+
 
         // ROLEREQUEST COLLECTION
 
@@ -521,7 +535,80 @@ async function run() {
         })
 
 
-        //
+        //Manage Requests 
+        app.get('/role-requests', verifyFireBaseToken, verifyAdmin, async (req, res) => {
+            const cursor = roleRequestCollection.find().sort({ created_at: -1 })
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
+        //Role update -> approve/reject
+        app.patch('/manage-requests/:id', verifyFireBaseToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+
+            const update = {
+                $set: {
+                    requestStatus: 'rejected',
+                }
+            }
+
+            const result = await roleRequestCollection.updateOne(query, update)
+            res.send(result)
+        })
+
+
+        // Approve requestType Patch
+        app.patch('/manage-requests/approve/:id', verifyFireBaseToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id
+            const info = req.body
+            const query = { _id: new ObjectId(id) }
+            const queryEmail = { userEmail: info.userEmail }
+
+            // Request status
+            const updateStatus = {
+                $set: {
+                    requestStatus: "approved"
+                }
+            }
+
+            const result = await roleRequestCollection.updateOne(query, updateStatus)
+
+
+
+            //update role
+            if (info.requestType === 'chef') {
+                const chefId = "chef-" + Math.floor(1000 + Math.random() * 7000);
+
+                const updateRole = {
+                    $set: {
+                        role: "chef",
+                        chefId: chefId
+                    }
+                }
+
+                
+                 await usersCollection.updateOne(queryEmail, updateRole)
+
+
+            }
+            
+
+            if (info.requestType === 'admin') {
+                const updateRole = {
+                    $set: {
+                        role: "admin",
+                    }
+                }
+
+                
+                await usersCollection.updateOne(queryEmail, updateRole)
+                
+            }
+            res.send(result)
+        })
+
+
 
 
 
