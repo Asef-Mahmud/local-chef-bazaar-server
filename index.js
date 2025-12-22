@@ -192,17 +192,20 @@ async function run() {
 
         // 1.Get (all)
         app.get('/meals', async (req, res) => {
+            const {limit=0, skip=0} = req.query
             const order = req.query.order ? (req.query.order === 'asc' ? 1 : -1) : null;
 
 
             if (order) {
-                const cursor = mealsCollection.find().sort({ price: order, created_at: -1 })
+                const count = await mealsCollection.countDocuments()
+                const cursor = mealsCollection.find().limit(Number(limit)).skip(Number(skip)).sort({ price: order, created_at: -1 })
                 const result = await cursor.toArray()
-                res.send(result)
+                res.send({result, total: count})
             } else {
-                const cursor = mealsCollection.find().sort({ created_at: -1 })
+                const count = await mealsCollection.countDocuments()
+                const cursor = mealsCollection.find().limit(Number(limit)).skip(Number(skip)).sort({ created_at: -1 })
                 const result = await cursor.toArray()
-                res.send(result)
+                res.send({result, total: count})
 
             }
 
@@ -305,7 +308,7 @@ async function run() {
 
         //Payment related apis
 
-        app.get('/orders/payment/:id', async (req, res) => {
+        app.get('/orders/payment/:id', verifyFireBaseToken, async (req, res) => {
             const id = req.params.id
             const query = { _id: new ObjectId(id) }
             const cursor = ordersCollection.find(query)
@@ -313,7 +316,7 @@ async function run() {
             res.send(result)
         })
 
-        app.post('/payment-checkout-session', async (req, res) => {
+        app.post('/payment-checkout-session', verifyFireBaseToken, async (req, res) => {
             const paymentInfo = req.body;
             const amount = parseInt(paymentInfo.cost) * 100;
 
@@ -352,7 +355,7 @@ async function run() {
 
         // update/patch (update the paid status)
 
-        app.patch('/payment-success', async (req, res) => {
+        app.patch('/payment-success', verifyFireBaseToken, async (req, res) => {
             try {
                 const sessionId = req.query.session_id;
                 if (!sessionId) {
@@ -587,7 +590,7 @@ async function run() {
         app.get('/orders/:chefId', verifyFireBaseToken, verifyChef, async (req, res) => {
             const chefId = req.params.chefId
             const query = { chefId: chefId }
-            const cursor = ordersCollection.find(query).sort({ timestamp: -1 })
+            const cursor = ordersCollection.find(query).sort({ orderTime: -1 })
             const result = await cursor.toArray()
             res.send(result)
         })
@@ -744,7 +747,7 @@ async function run() {
 
         //totalUsers
 
-        app.get('/users/totalUsers/stats', async (req, res) => {
+        app.get('/users/totalUsers/stats', verifyFireBaseToken, verifyAdmin, async (req, res) => {
             // total users
             const totalUsers = await usersCollection.countDocuments();
             res.send(totalUsers)
@@ -752,7 +755,7 @@ async function run() {
 
 
         //aggregation and Pipeline
-        app.get('/orders/order-status/stats', async (req, res) => {
+        app.get('/orders/order-status/stats', verifyFireBaseToken, verifyAdmin, async (req, res) => {
 
             const pipeline = [
                 {
@@ -773,7 +776,7 @@ async function run() {
         })
 
 
-        app.get('/payments/totalPayments/stats', async (req, res) => {
+        app.get('/payments/totalPayments/stats', verifyFireBaseToken, verifyAdmin, async (req, res) => {
             // payments
             const pipelinePayment = [
                 {
