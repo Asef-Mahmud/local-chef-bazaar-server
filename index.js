@@ -3,6 +3,7 @@ const cors = require('cors');
 const app = express()
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const stripe = require('stripe')(process.env.STRIPE_SECRET);
 const port = process.env.PORT || 3000
 
 
@@ -83,6 +84,7 @@ async function run() {
         const ordersCollection = db.collection('orders')
         const usersCollection = db.collection('users')
         const roleRequestCollection = db.collection('roleRequest')
+        const paymentCollection = db.collection('payment')
 
 
 
@@ -301,15 +303,115 @@ async function run() {
         // USER\
 
 
-        //Payment
+        //Payment related apis
 
-        app.get('/orders/payment/:id',  async (req, res) => {
+        app.get('/orders/payment/:id', async (req, res) => {
             const id = req.params.id
-            const query = {_id: new ObjectId(id)}
+            const query = { _id: new ObjectId(id) }
             const cursor = ordersCollection.find(query)
             const result = await cursor.toArray()
             res.send(result)
         })
+
+        app.post('/payment-checkout-session', async (req, res) => {
+            const paymentInfo = req.body;
+            const amount = parseInt(paymentInfo.cost) * 100;
+
+
+
+            const session = await stripe.checkout.sessions.create({
+                line_items: [
+                    {
+                        // Provide the exact Price ID (for example, price_1234) of the product you want to sell
+                        price_data: {
+                            currency: 'BDT',
+                            unit_amount: amount,
+                            product_data: {
+                                name: `Please pay for: ${paymentInfo.mealName}`
+                            }
+                        },
+
+                        quantity: 1,
+                    },
+                ],
+                customer_email: paymentInfo.userEmail,
+                mode: 'payment',
+                metadata: {
+                    orderId: paymentInfo.orderId,
+                    orderName: paymentInfo.mealName
+                },
+
+
+                success_url: `${process.env.SITE_DOMAIN}/dashboard/order/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${process.env.SITE_DOMAIN}/dashboard/order/payment-cancelled`,
+            });
+
+            // console.log(session)
+            res.send({ url: session.url })
+        })
+
+        // update/patch (update the paid status)
+
+        app.patch('/payment-success', async (req, res) => {
+            try {
+                const sessionId = req.query.session_id;
+                if (!sessionId) {
+                    return res.status(400).send({ error: 'Missing session_id' });
+                }
+
+                const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+                if (session.payment_status !== 'paid') {
+                    return res.send({ success: false, message: 'Payment not completed' });
+                }
+
+                const transactionId = session.payment_intent;
+
+
+                await ordersCollection.updateOne(
+                    { _id: new ObjectId(session.metadata.orderId) },
+                    { $set: { paymentStatus: 'paid' } }
+                );
+
+
+                const payment = {
+                    amount: session.amount_total / 100,
+                    currency: session.currency,
+                    customerEmail: session.customer_email,
+                    transactionId,
+                    orderId: session.metadata.orderId,
+                    orderName: session.metadata.orderName,
+                    paymentStatus: session.payment_status,
+                    paidAt: new Date(),
+                };
+
+                const result = await paymentCollection.updateOne(
+                    { transactionId },
+                    { $setOnInsert: payment },
+                    { upsert: true }
+                );
+
+                return res.send({
+                    success: true,
+                    alreadyExists: result.matchedCount > 0,
+                    transactionId
+                });
+
+            } catch (error) {
+                if (error.code === 11000) {
+                    return res.send({
+                        success: true,
+                        message: 'Payment already recorded',
+                    });
+                }
+
+                console.error(error);
+                res.status(500).send({ error: 'Internal server error' });
+            }
+        });
+
+
+
 
         // Payment ends here
 
@@ -587,12 +689,12 @@ async function run() {
                     }
                 }
 
-                
-                 await usersCollection.updateOne(queryEmail, updateRole)
+
+                await usersCollection.updateOne(queryEmail, updateRole)
 
 
             }
-            
+
 
             if (info.requestType === 'admin') {
                 const updateRole = {
@@ -601,13 +703,93 @@ async function run() {
                     }
                 }
 
-                
+
                 await usersCollection.updateOne(queryEmail, updateRole)
-                
+
             }
             res.send(result)
         })
 
+
+
+        // Admin stats
+        app.get('/admin-stats', verifyFireBaseToken, verifyAdmin, async (req, res) => {
+
+            const totalUsers = await usersCollection.countDocuments();
+
+            const pendingOrders = await ordersCollection.countDocuments({
+                orderStatus: "pending"
+            });
+
+            const deliveredOrders = await ordersCollection.countDocuments({
+                orderStatus: "delivered"
+            });
+
+            const payments = await paymentsCollection.find({
+                paymentStatus: "paid"
+            }).toArray();
+
+            const totalPaymentAmount = payments.reduce(
+                (sum, payment) => sum + payment.amount,
+                0
+            );
+
+            res.send({
+                totalUsers,
+                pendingOrders,
+                deliveredOrders,
+                totalPaymentAmount
+            });
+        });
+
+        //totalUsers
+
+        app.get('/users/totalUsers/stats', async (req, res) => {
+            // total users
+            const totalUsers = await usersCollection.countDocuments();
+            res.send(totalUsers)
+        })
+
+
+        //aggregation and Pipeline
+        app.get('/orders/order-status/stats', async (req, res) => {
+
+            const pipeline = [
+                {
+                    $match: {
+                        orderStatus: { $in: ['pending', 'delivered'] }
+                    }
+                },
+                {
+                    $group: {
+                        _id: '$orderStatus',
+                        count: { $sum: 1 }
+                    }
+                }
+            ]
+            const result = await ordersCollection.aggregate(pipeline).toArray()
+
+            res.send(result)
+        })
+
+
+        app.get('/payments/totalPayments/stats', async (req, res) => {
+            // payments
+            const pipelinePayment = [
+                {
+                    $group: {
+                        _id: null,
+                        totalPaymentAmount: { $sum: '$amount' }
+                    }
+                }
+            ]
+            const payments = await paymentCollection.aggregate(pipelinePayment).toArray();
+
+            const totalPaymentAmount =
+                payments.length > 0 ? payments[0].totalPaymentAmount : 0;
+
+            res.send(totalPaymentAmount)
+        })
 
 
 
