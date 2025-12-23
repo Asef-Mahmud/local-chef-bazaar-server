@@ -10,7 +10,10 @@ const port = process.env.PORT || 3000
 // Firebase admin sdk
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./local-chef-bazaar-4-all-firebase-adminsdk.json");
+
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
+
 
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
@@ -37,7 +40,7 @@ const verifyFireBaseToken = async (req, res, next) => {
     const token = authorization.split(' ')[1];
     try {
         const decoded = await admin.auth().verifyIdToken(token);
-        console.log('inside firebaseToken', decoded)
+        // console.log('inside firebaseToken', decoded)
         req.token_email = decoded.email;
 
         next();
@@ -74,7 +77,7 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
+        // await client.connect();
 
         const db = client.db('local_chef_bazaar_db')
         const mealsCollection = db.collection('meals')
@@ -147,6 +150,7 @@ async function run() {
 
         app.post('/users', async (req, res) => {
             const user = req.body
+            console.log(user)
             user.role = "user"
             user.status = "active"
 
@@ -157,6 +161,7 @@ async function run() {
         app.get('/users/:email', verifyFireBaseToken, async (req, res) => {
             const email = req.params.email;
             const query = { userEmail: email }
+
             const user = await usersCollection.findOne(query);
             res.send(user)
         })
@@ -192,24 +197,30 @@ async function run() {
 
         // 1.Get (all)
         app.get('/meals', async (req, res) => {
-            const {limit=0, skip=0} = req.query
-            const order = req.query.order ? (req.query.order === 'asc' ? 1 : -1) : null;
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 10;
+            const skip = (page - 1) * limit;
 
+            const order = req.query.order === 'asc' ? 1 : req.query.order === 'desc' ? -1 : null;
 
-            if (order) {
-                const count = await mealsCollection.countDocuments()
-                const cursor = mealsCollection.find().limit(Number(limit)).skip(Number(skip)).sort({ price: order, created_at: -1 })
-                const result = await cursor.toArray()
-                res.send({result, total: count})
-            } else {
-                const count = await mealsCollection.countDocuments()
-                const cursor = mealsCollection.find().limit(Number(limit)).skip(Number(skip)).sort({ created_at: -1 })
-                const result = await cursor.toArray()
-                res.send({result, total: count})
+            const sortOption = order ? { price: order, created_at: -1 } : { created_at: -1 };
 
-            }
+            const result = await mealsCollection
+                .find()
+                .sort(sortOption)
+                .skip(skip)
+                .limit(limit)
+                .toArray();
 
-        })
+            const total = await mealsCollection.countDocuments();
+
+            res.send({
+                result,
+                total,
+                page,
+                totalPages: Math.ceil(total / limit),
+            });
+        });
 
 
         //1.1. get (one)
@@ -804,8 +815,8 @@ async function run() {
 
 
         // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // await client.db("admin").command({ ping: 1 });
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
         // await client.close();
